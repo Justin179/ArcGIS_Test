@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no" />
+    <title>Search Widget</title>
+    <!-- css -->
+    <link rel="stylesheet" href="https://js.arcgis.com/3.22/esri/css/esri.css">
+    <style>
+        html,
+        body,
+        #map {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #search {
+            display: block;
+            position: absolute;
+            z-index: 3;
+            top: 20px;
+            left: 75px;
+        }
+
+        .spotlight {
+            z-index: -1;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            border-radius: 50%;
+            opacity: 0;
+            box-shadow: inset rgba(0, 0, 0, 0.25) 0px 0px 20px 20px,
+            rgba(0, 0, 0, 0.25) 0px 0px 0px 1000px;
+            transition: all 1000ms;
+            -moz-transition: all 1000ms;
+            -webkit-transition: all 1000ms;
+        }
+
+        .spotlight-active {
+            z-index: 2;
+            opacity: 1;
+        }
+    </style>
+    <!-- js -->
+    <script src="https://js.arcgis.com/3.22/"></script>
+    <script>
+        var map;
+
+        require([
+            "esri/map",
+            "esri/dijit/Search",
+            "esri/geometry/Extent",
+            "esri/graphic",
+            "esri/symbols/SimpleMarkerSymbol",
+            "esri/geometry/screenUtils",
+            "dojo/dom",
+            "dojo/dom-construct",
+            "dojo/query",
+            "dojo/_base/Color",
+            "dojo/domReady!"
+        ], function(Map, Search, Extent, Graphic, SimpleMarkerSymbol, screenUtils, dom, domConstruct, query, Color) {
+
+            // create a map instance
+            map = new Map("map", {
+                basemap: "topo", //For full list of pre-defined basemaps, navigate to http://arcg.is/1JVo6Wd
+                center: [-117.19, 34.055], // longitude, latitude
+                zoom: 15
+            });
+
+            // create a instance of the search widget
+            var search = new Search({
+                map: map,
+            }, dom.byId("search"));
+
+            
+            // 拿出來 get a reference to the search's sources
+            var sources = search.get("sources");
+            // 做手腳 use a feature layer and provide additional properties to specify the field to search, how the suggestions should display (suggestionTemplate
+            sources.push({
+                featureLayer: new FeatureLayer("http://sampleserver6.arcgisonline.com/arcgis/rest/services/PhoneIncidents/MapServer/0"),
+                searchFields: ["pocname"],
+                suggestionTemplate: "${pocname}: ${synopsis}",
+                exactMatch: false,
+                name: "Redlands incidents",
+                outFields: ["*"],
+                placeholder: "Search for incidents",
+                maxResults: 4,
+                maxSuggestions: 3,
+                enableSuggestions: true,
+                minCharacters: 2
+            });
+            // 塞回去push a new source object back to it; Set the sources above to the search widget
+            search.set("sources", sources);
+            
+            // 限定搜索範圍，有了這個，去搜台北市就搜不到了…
+            //Create extent to limit search
+            //            var extent = new Extent({
+            //                "spatialReference": {
+            //                    "wkid": 102100
+            //                },
+            //                "xmin": -13063280,
+            //                "xmax": -13033928,
+            //                "ymin": 4028345,
+            //                "ymax": 4042715
+            //            });
+            //            //set the source's searchExtent to the extent specified above
+            //            search.sources[0].searchExtent = extent;
+
+            search.startup();
+
+            // adds a spotlight div to the map container once the map loads.
+            map.on("load", enableSpotlight);
+            // When a result is clicked or the enter key is pressed, add the spotlight to the map
+            search.on("select-result", showLocation);
+            // add logic to remove the spotlight when the search input is cleared.
+            search.on("clear-search", removeSpotlight);
+
+            
+            
+            
+            function enableSpotlight() {
+                var html = "<div id='spotlight' class='spotlight'></div>"
+                domConstruct.place(html, dom.byId("map_container"), "first");
+            }
+
+            function showLocation(e) {
+                map.graphics.clear();
+                var point = e.result.feature.geometry;
+                var symbol = new SimpleMarkerSymbol().setStyle(
+                    SimpleMarkerSymbol.STYLE_SQUARE).setColor(
+                    new Color([255, 0, 0, 0.5])
+                );
+                var graphic = new Graphic(point, symbol);
+                map.graphics.add(graphic);
+
+                map.infoWindow.setTitle("Search Result");
+                map.infoWindow.setContent(e.result.name);
+                map.infoWindow.show(e.result.feature.geometry);
+                var spotlight = map.on("extent-change", function() {
+                    var geom = screenUtils.toScreenGeometry(map.extent, map.width, map.height, e.result.extent);
+                    var width = geom.xmax - geom.xmin;
+                    var height = geom.ymin - geom.ymax;
+
+                    var max = height;
+                    if (width > height) {
+                        max = width;
+                    }
+
+                    var margin = '-' + Math.floor(max / 2) + 'px 0 0 -' + Math.floor(max / 2) + 'px';
+
+                    query(".spotlight").addClass("spotlight-active").style({
+                        width: max + "px",
+                        height: max + "px",
+                        margin: margin
+                    });
+                    spotlight.remove();
+                });
+            }
+
+            function removeSpotlight() {
+                query(".spotlight").removeClass("spotlight-active");
+                map.infoWindow.hide();
+                map.graphics.clear();
+            }
+
+
+        });
+    </script>
+</head>
+
+<body>
+    <div id="search"></div>
+    <div id="map"></div>
+</body>
+
+</html>
